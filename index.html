@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Endless Run - Ocong</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+</head>
+<body style="margin:0; padding:0; background:#000;">
+
+<script>
+    var globalAmbience;
+    var X_POSITION = { LEFT: 0, CENTER: 0, RIGHT: 0 };
+    var Y_POSITION = { TOP: 0, CENTER: 0, BOTTOM: 0 };
+</script>
+
+<script src="sceneMenu.js"></script>
+<script src="scenePlay.js"></script>
+
+<script>
+    var config = {
+        type: Phaser.AUTO,
+        width: 1366,
+        height: 768,
+        backgroundColor: '#000000',
+        scene: [SceneMenu, ScenePlay]
+    };
+
+    var game = new Phaser.Game(config);
+</script>
+
+</body>
+</html>
