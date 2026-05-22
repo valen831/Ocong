@@ -37,8 +37,8 @@ class ScenePlay extends Phaser.Scene {
         // Setiap klik selalu memberi dorongan ke atas (jumpForce).
         // Tidak ada batas atas; karakter bisa terbang ke langit.
         this.velocityY = 0;
-        this.gravity   = 0.5;      // gravitasi sedikit lebih kuat agar terasa Flappy
-        this.jumpForce = -9;       // dorongan ke atas setiap klik
+        this.gravity   = 0.35;     // gravitasi ringan agar melayang lebih lama
+        this.jumpForce = -13;      // dorongan kuat ke atas seperti Flappy Bird asli
 
         var W = this.cameras.main.width;
         var H = this.cameras.main.height;
