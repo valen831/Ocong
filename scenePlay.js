@@ -1,9 +1,5 @@
 // ============================================================
 //  scenePlay.js  –  Endless Run Ocong
-//  Perubahan:
-//    - Mekanik lompat gaya Flappy Bird (setiap klik = dorongan ke atas)
-//    - Batas atas TIDAK mematikan (karakter bisa naik sampai langit)
-//    - Fullscreen-aware (ukuran dari game config)
 // ============================================================
 
 class ScenePlay extends Phaser.Scene {
@@ -28,29 +24,24 @@ class ScenePlay extends Phaser.Scene {
     create() {
         this.isGameRunning = false;
         this.timerHalangan = 60;
-        this.halangan      = [];
+        this.timerTanah    = 120; // timer spawn halangan tanah
+        this.halangan      = []; // halangan udara
+        this.halanganTanah = []; // halangan tanah (obstc.png meluncur di bawah)
         this.background    = [];
         this.score         = 0;
         this.gameOverShown = false;
 
-        // ── FISIKA GAYA FLAPPY BIRD ───────────────────────────
-        // Setiap klik selalu memberi dorongan ke atas (jumpForce).
-        // Tidak ada batas atas; karakter bisa terbang ke langit.
         this.velocityY = 0;
-        this.gravity   = 0.35;     // gravitasi ringan agar melayang lebih lama
-        this.jumpForce = -13;      // dorongan kuat ke atas seperti Flappy Bird asli
+        this.gravity   = 0.35;
+        this.jumpForce = -13;
 
         var W = this.cameras.main.width;
         var H = this.cameras.main.height;
 
-        // Batas bawah saja (tanah) — sentuh tanah = mati
         this.batasBawah = H - 80;
-
-        // Batas atas hanya untuk clamp visual, tidak mematikan
         this.batasAtas  = 0;
 
         // ── PARALLAX BACKGROUND ──────────────────────────────
-        var halfW = W / 2;
         var bgConfigs = [
             { key: 'bg_play', speed: 3, depth: 0 },
             { key: 'fg_play', speed: 6, depth: 1 }
@@ -58,7 +49,7 @@ class ScenePlay extends Phaser.Scene {
         bgConfigs.forEach((cfg) => {
             var arr = [];
             for (var i = 0; i < 2; i++) {
-                var obj = this.add.image(halfW + i * W, H / 2, cfg.key)
+                var obj = this.add.image(W / 2 + i * W, H / 2, cfg.key)
                     .setDepth(cfg.depth)
                     .setDisplaySize(W, H);
                 obj.setData('kecepatan', cfg.speed);
@@ -67,7 +58,7 @@ class ScenePlay extends Phaser.Scene {
             this.background.push(arr);
         });
 
-        // ── KARAKTER (masuk dari atas dengan bounce) ─────────
+        // ── KARAKTER ─────────────────────────────────────────
         this.chara = this.add.image(W * 0.2, -100, 'chara').setDepth(5);
         this.tweens.add({
             targets:  this.chara,
@@ -170,17 +161,14 @@ class ScenePlay extends Phaser.Scene {
             }
             if (!this.isGameRunning) return;
 
-            // Suara klik acak
             var r = Phaser.Math.Between(1, 3);
             if (r === 1) this.sfxKlik1.play();
             else if (r === 2) this.sfxKlik2.play();
             else this.sfxKlik3.play();
 
-            // ── FLAPPY BIRD: setiap klik = dorongan ke atas ──
             this.velocityY = this.jumpForce;
         });
 
-        // Keyboard spacebar juga bisa dipakai
         this.input.keyboard.on('keydown-SPACE', () => {
             if (this.gameOverShown) {
                 this.scene.start('SceneMenu');
@@ -198,9 +186,9 @@ class ScenePlay extends Phaser.Scene {
         var W = this.cameras.main.width;
         var H = this.cameras.main.height;
 
-        // 1. Gravitasi & gerak vertikal karakter (Flappy Bird style)
-        this.velocityY  += this.gravity;
-        this.chara.y    += this.velocityY;
+        // 1. Gravitasi & gerak karakter
+        this.velocityY += this.gravity;
+        this.chara.y   += this.velocityY;
 
         // 2. Parallax background
         this.background.forEach((layer) => {
@@ -210,30 +198,63 @@ class ScenePlay extends Phaser.Scene {
             });
         });
 
-        // 3. Spawn halangan
+        // 3. Spawn halangan UDARA (posisi acak di atas)
         this.timerHalangan--;
         if (this.timerHalangan <= 0) {
             this.timerHalangan = Phaser.Math.Between(60, 120);
-            var posY  = Phaser.Math.Between(H * 0.15, H * 0.85);
+            var posY  = Phaser.Math.Between(H * 0.10, H * 0.60);
             var speed = Phaser.Math.Between(10, 15);
             var obj   = this.add.image(W + 50, posY, 'halangan')
-                .setOrigin(0, 0.5).setDepth(4);
+                .setOrigin(0.5, 0.5).setDepth(4);
+            // Rotasi terus menerus agar terlihat berputar
+            this.tweens.add({
+                targets: obj, angle: 360,
+                duration: 1200, repeat: -1, ease: 'Linear'
+            });
             obj.setData('status_aktif', true);
-            obj.setData('kecepatan',    speed);
+            obj.setData('kecepatan', speed);
             this.halangan.push(obj);
         }
 
-        // 4. Gerak & hapus halangan
+        // 4. Spawn halangan TANAH (obstc.png meluncur di garis tanah)
+        this.timerTanah--;
+        if (this.timerTanah <= 0) {
+            this.timerTanah = Phaser.Math.Between(90, 160);
+            var speed = Phaser.Math.Between(6, 10); // kecepatan lebih pelan
+            var obj   = this.add.image(W + 50, this.batasBawah - 10, 'halangan')
+                .setOrigin(0.5, 0.5).setDepth(4)
+                .setScale(0.9); // sedikit lebih kecil agar pas di tanah
+            // Rotasi berputar seperti bola bergulir
+            this.tweens.add({
+                targets: obj, angle: 360,
+                duration: 600, repeat: -1, ease: 'Linear'
+            });
+            obj.setData('status_aktif', true);
+            obj.setData('kecepatan', speed);
+            this.halanganTanah.push(obj);
+        }
+
+        // 5. Gerak & hapus halangan udara
         for (var i = this.halangan.length - 1; i >= 0; i--) {
             var h = this.halangan[i];
             h.x -= h.getData('kecepatan');
-            if (h.x < -150) {
+            if (h.x < -80) {
                 h.destroy();
                 this.halangan.splice(i, 1);
             }
         }
 
-        // 5. Hitung skor
+        // 6. Gerak & hapus halangan tanah
+        for (var i = this.halanganTanah.length - 1; i >= 0; i--) {
+            var h = this.halanganTanah[i];
+            h.x -= h.getData('kecepatan');
+            if (h.x < -80) {
+                h.destroy();
+                this.halanganTanah.splice(i, 1);
+            }
+        }
+
+        // 7. Hitung skor (dari halangan udara)
         this.halangan.forEach((h) => {
             if (h.getData('status_aktif') && h.x < this.chara.x) {
                 h.setData('status_aktif', false);
@@ -242,7 +263,16 @@ class ScenePlay extends Phaser.Scene {
             }
         });
 
-        // 6. Deteksi tabrakan dengan halangan
+        // Skor dari halangan tanah juga
+        this.halanganTanah.forEach((h) => {
+            if (h.getData('status_aktif') && h.x < this.chara.x) {
+                h.setData('status_aktif', false);
+                this.score++;
+                this.txtSkor.setText('SCORE: ' + this.score);
+            }
+        });
+
+        // 8. Deteksi tabrakan halangan UDARA
         this.halangan.forEach((h) => {
             var dx = Math.abs(h.x - this.chara.x);
             var dy = Math.abs(h.y - this.chara.y);
@@ -251,14 +281,20 @@ class ScenePlay extends Phaser.Scene {
             }
         });
 
-        // 7. Batas layar
-        // Batas atas: clamp saja, TIDAK mati (bisa terbang ke langit)
+        // 9. Deteksi tabrakan halangan TANAH
+        this.halanganTanah.forEach((h) => {
+            var dx = Math.abs(h.x - this.chara.x);
+            var dy = Math.abs(h.y - this.chara.y);
+            if (dx < 35 && dy < 35) {
+                this.gameOver();
+            }
+        });
+
+        // 10. Batas layar
         if (this.chara.y < this.batasAtas) {
             this.chara.y   = this.batasAtas;
-            this.velocityY = 0; // hentikan momentum saat mentok atas
+            this.velocityY = 0;
         }
-
-        // Batas bawah: tanah = pijakan, tidak mati
         if (this.chara.y >= this.batasBawah) {
             this.chara.y   = this.batasBawah;
             this.velocityY = 0;
