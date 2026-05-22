@@ -258,10 +258,10 @@ class ScenePlay extends Phaser.Scene {
             this.velocityY = 0; // hentikan momentum saat mentok atas
         }
 
-        // Batas bawah: sentuh tanah = mati (seperti Flappy Bird)
+        // Batas bawah: tanah = pijakan, tidak mati
         if (this.chara.y >= this.batasBawah) {
-            this.chara.y = this.batasBawah;
-            this.gameOver();
+            this.chara.y   = this.batasBawah;
+            this.velocityY = 0;
         }
     }
 }
