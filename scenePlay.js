@@ -26,9 +26,13 @@ class ScenePlay extends Phaser.Scene {
         this.timerHalangan = 60;
         this.halangan      = [];
         this.background    = [];
-        this.charaTweens   = null;
         this.score         = 0;
         this.gameOverShown = false;
+
+        // Fisika karakter
+        this.velocityY = 0;
+        this.gravity   = 0.3;
+        this.jumpForce = -9;
 
         var W = this.cameras.main.width;
         var H = this.cameras.main.height;
@@ -52,14 +56,17 @@ class ScenePlay extends Phaser.Scene {
             this.background.push(arr);
         });
 
-        // ── KARAKTER ─────────────────────────────────────────
-        this.chara = this.add.image(200, H + 100, 'chara').setDepth(5);
+        // ── KARAKTER (masuk dari atas dengan bounce) ─────────
+        this.chara = this.add.image(200, -100, 'chara').setDepth(5);
         this.tweens.add({
             targets:  this.chara,
             duration: 600,
-            ease:     'Power2',
+            ease:     'Bounce.easeOut',
             y:        H / 2,
-            onComplete: () => { this.isGameRunning = true; }
+            onComplete: () => {
+                this.velocityY     = 0;
+                this.isGameRunning = true;
+            }
         });
 
         // ── PANEL SKOR ────────────────────────────────────────
@@ -113,11 +120,11 @@ class ScenePlay extends Phaser.Scene {
             this.isGameRunning = false;
             this.gameOverShown = false;
 
-            if (this.charaTweens) this.charaTweens.stop();
+            this.velocityY = 0;
             this.sfxDead.play();
 
             // Simpan highscore
-            var highscore = parseInt(localStorage.getItem('highscore')) || 0;
+            var highscore   = parseInt(localStorage.getItem('highscore')) || 0;
             var isNewRecord = this.score > highscore;
             if (isNewRecord) {
                 localStorage.setItem('highscore', this.score);
@@ -171,16 +178,8 @@ class ScenePlay extends Phaser.Scene {
             else if (r === 2) this.sfxKlik2.play();
             else this.sfxKlik3.play();
 
-            // Tween turun, tapi tidak melewati batas bawah
-            var targetY = Math.min(this.chara.y + 200, this.batasBawah);
-
-            if (this.charaTweens) this.charaTweens.stop();
-            this.charaTweens = this.tweens.add({
-                targets:  this.chara,
-                duration: 750,
-                ease:     'Power1',
-                y:        targetY
-            });
+            // Lompat ke atas
+            this.velocityY = this.jumpForce;
         });
     }
 
@@ -188,8 +187,9 @@ class ScenePlay extends Phaser.Scene {
     update() {
         if (!this.isGameRunning) return;
 
-        // 1. Karakter naik otomatis
-        this.chara.y -= 2;
+        // 1. Gravitasi & gerak vertikal karakter
+        this.velocityY  += this.gravity;
+        this.chara.y    += this.velocityY;
 
         // 2. Parallax background
         this.background.forEach((layer) => {
@@ -240,9 +240,16 @@ class ScenePlay extends Phaser.Scene {
             }
         });
 
-        // 7. Batas atas layar
+        // 7. Batas layar
+        // Mati jika keluar batas atas
         if (this.chara.y < this.batasAtas) {
             this.gameOver();
+            return;
+        }
+        // Mendarat di tanah — berhenti, tidak mati
+        if (this.chara.y >= this.batasBawah) {
+            this.chara.y   = this.batasBawah;
+            this.velocityY = 0;
         }
     }
 }
