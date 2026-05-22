@@ -1,5 +1,9 @@
 // ============================================================
 //  scenePlay.js  –  Endless Run Ocong
+//  Perubahan:
+//    - Mekanik lompat gaya Flappy Bird (setiap klik = dorongan ke atas)
+//    - Batas atas TIDAK mematikan (karakter bisa naik sampai langit)
+//    - Fullscreen-aware (ukuran dari game config)
 // ============================================================
 
 class ScenePlay extends Phaser.Scene {
@@ -29,19 +33,24 @@ class ScenePlay extends Phaser.Scene {
         this.score         = 0;
         this.gameOverShown = false;
 
-        // Fisika karakter
+        // ── FISIKA GAYA FLAPPY BIRD ───────────────────────────
+        // Setiap klik selalu memberi dorongan ke atas (jumpForce).
+        // Tidak ada batas atas; karakter bisa terbang ke langit.
         this.velocityY = 0;
-        this.gravity   = 0.3;
-        this.jumpForce = -9;
+        this.gravity   = 0.5;      // gravitasi sedikit lebih kuat agar terasa Flappy
+        this.jumpForce = -9;       // dorongan ke atas setiap klik
 
         var W = this.cameras.main.width;
         var H = this.cameras.main.height;
 
-        // Batas atas dan bawah karakter
-        this.batasAtas  = 80;
-        this.batasBawah = H - 120;
+        // Batas bawah saja (tanah) — sentuh tanah = mati
+        this.batasBawah = H - 80;
+
+        // Batas atas hanya untuk clamp visual, tidak mematikan
+        this.batasAtas  = 0;
 
         // ── PARALLAX BACKGROUND ──────────────────────────────
+        var halfW = W / 2;
         var bgConfigs = [
             { key: 'bg_play', speed: 3, depth: 0 },
             { key: 'fg_play', speed: 6, depth: 1 }
@@ -49,7 +58,9 @@ class ScenePlay extends Phaser.Scene {
         bgConfigs.forEach((cfg) => {
             var arr = [];
             for (var i = 0; i < 2; i++) {
-                var obj = this.add.image(683 + i * 1366, 384, cfg.key).setDepth(cfg.depth);
+                var obj = this.add.image(halfW + i * W, H / 2, cfg.key)
+                    .setDepth(cfg.depth)
+                    .setDisplaySize(W, H);
                 obj.setData('kecepatan', cfg.speed);
                 arr.push(obj);
             }
@@ -57,7 +68,7 @@ class ScenePlay extends Phaser.Scene {
         });
 
         // ── KARAKTER (masuk dari atas dengan bounce) ─────────
-        this.chara = this.add.image(200, -100, 'chara').setDepth(5);
+        this.chara = this.add.image(W * 0.2, -100, 'chara').setDepth(5);
         this.tweens.add({
             targets:  this.chara,
             duration: 600,
@@ -81,7 +92,7 @@ class ScenePlay extends Phaser.Scene {
         this.sfxKlik3 = this.sound.add('klik3');
         this.sfxDead  = this.sound.add('dead');
 
-        // ── GAME OVER OVERLAY (tersembunyi dulu) ─────────────
+        // ── GAME OVER OVERLAY ─────────────────────────────────
         this.overlayBg = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.7)
             .setDepth(20).setVisible(false);
 
@@ -123,7 +134,6 @@ class ScenePlay extends Phaser.Scene {
             this.velocityY = 0;
             this.sfxDead.play();
 
-            // Simpan highscore
             var highscore   = parseInt(localStorage.getItem('highscore')) || 0;
             var isNewRecord = this.score > highscore;
             if (isNewRecord) {
@@ -131,7 +141,6 @@ class ScenePlay extends Phaser.Scene {
                 highscore = this.score;
             }
 
-            // Tampilkan overlay game over setelah 0.5 detik
             this.time.delayedCall(500, () => {
                 this.overlayBg.setVisible(true);
                 this.txtGameOver.setVisible(true);
@@ -141,35 +150,24 @@ class ScenePlay extends Phaser.Scene {
                 this.txtRestart.setVisible(true);
                 this.gameOverShown = true;
 
-                // Animasi teks game over
                 this.tweens.add({
                     targets: this.txtGameOver,
                     scaleX: 1.08, scaleY: 1.08,
-                    duration: 500,
-                    yoyo: true,
-                    repeat: -1,
-                    ease: 'Sine.easeInOut'
+                    duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
                 });
-
-                // Kedip teks restart
                 this.tweens.add({
                     targets: this.txtRestart,
-                    alpha: 0,
-                    duration: 700,
-                    yoyo: true,
-                    repeat: -1
+                    alpha: 0, duration: 700, yoyo: true, repeat: -1
                 });
             });
         };
 
         // ── INPUT ─────────────────────────────────────────────
         this.input.on('pointerup', () => {
-            // Kalau game over sudah tampil, kembali ke menu
             if (this.gameOverShown) {
                 this.scene.start('SceneMenu');
                 return;
             }
-
             if (!this.isGameRunning) return;
 
             // Suara klik acak
@@ -178,7 +176,17 @@ class ScenePlay extends Phaser.Scene {
             else if (r === 2) this.sfxKlik2.play();
             else this.sfxKlik3.play();
 
-            // Lompat ke atas
+            // ── FLAPPY BIRD: setiap klik = dorongan ke atas ──
+            this.velocityY = this.jumpForce;
+        });
+
+        // Keyboard spacebar juga bisa dipakai
+        this.input.keyboard.on('keydown-SPACE', () => {
+            if (this.gameOverShown) {
+                this.scene.start('SceneMenu');
+                return;
+            }
+            if (!this.isGameRunning) return;
             this.velocityY = this.jumpForce;
         });
     }
@@ -187,7 +195,10 @@ class ScenePlay extends Phaser.Scene {
     update() {
         if (!this.isGameRunning) return;
 
-        // 1. Gravitasi & gerak vertikal karakter
+        var W = this.cameras.main.width;
+        var H = this.cameras.main.height;
+
+        // 1. Gravitasi & gerak vertikal karakter (Flappy Bird style)
         this.velocityY  += this.gravity;
         this.chara.y    += this.velocityY;
 
@@ -195,7 +206,7 @@ class ScenePlay extends Phaser.Scene {
         this.background.forEach((layer) => {
             layer.forEach((bg) => {
                 bg.x -= bg.getData('kecepatan');
-                if (bg.x < -683) bg.x += 1366 * 2;
+                if (bg.x < -(W / 2)) bg.x += W * 2;
             });
         });
 
@@ -203,9 +214,9 @@ class ScenePlay extends Phaser.Scene {
         this.timerHalangan--;
         if (this.timerHalangan <= 0) {
             this.timerHalangan = Phaser.Math.Between(60, 120);
-            var posY  = Phaser.Math.Between(100, 650);
+            var posY  = Phaser.Math.Between(H * 0.15, H * 0.85);
             var speed = Phaser.Math.Between(10, 15);
-            var obj   = this.add.image(1500, posY, 'halangan')
+            var obj   = this.add.image(W + 50, posY, 'halangan')
                 .setOrigin(0, 0.5).setDepth(4);
             obj.setData('status_aktif', true);
             obj.setData('kecepatan',    speed);
@@ -231,7 +242,7 @@ class ScenePlay extends Phaser.Scene {
             }
         });
 
-        // 6. Deteksi tabrakan
+        // 6. Deteksi tabrakan dengan halangan
         this.halangan.forEach((h) => {
             var dx = Math.abs(h.x - this.chara.x);
             var dy = Math.abs(h.y - this.chara.y);
@@ -241,15 +252,16 @@ class ScenePlay extends Phaser.Scene {
         });
 
         // 7. Batas layar
-        // Mati jika keluar batas atas
+        // Batas atas: clamp saja, TIDAK mati (bisa terbang ke langit)
         if (this.chara.y < this.batasAtas) {
-            this.gameOver();
-            return;
+            this.chara.y   = this.batasAtas;
+            this.velocityY = 0; // hentikan momentum saat mentok atas
         }
-        // Mendarat di tanah — berhenti, tidak mati
+
+        // Batas bawah: sentuh tanah = mati (seperti Flappy Bird)
         if (this.chara.y >= this.batasBawah) {
-            this.chara.y   = this.batasBawah;
-            this.velocityY = 0;
+            this.chara.y = this.batasBawah;
+            this.gameOver();
         }
     }
 }
